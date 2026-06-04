@@ -119,9 +119,71 @@ where rank_customer<=3;
 -- 10. Find month-over-month sales growth
 with month_sales as
 (
-select date_format(order_date,'%m') as sale_month,sum(sales) as total_sales
+select date_format(order_date,'%m') as sale_month,round(sum(sales),2) as total_sales
 from fact_orders
 group by sale_month
 order by sale_month asc
 )
 select * from month_sales;
+-- 11. Detect duplicate orders
+with dup_orders as 
+(
+select order_id,count(*) as cnt
+from fact_orders
+group by order_id
+)
+select * from dup_orders
+where cnt>1;
+-- 12. Find orphan fact records
+with orphan_records as
+(
+select o.*
+from fact_orders o 
+left join dim_customers c
+on o.customer_id=c.customer_id
+where c.customer_id is null
+)
+select * from orphan_records;
+-- 13. Running total of sales
+with tot_sales as
+( 
+select order_date, sum(sales) as sales
+from fact_orders 
+group by order_date
+)
+select order_date, sales, 
+		sum(sales) over (
+        order by order_date
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) as running_total
+from tot_sales
+order by order_date;
+-- 14. Find highest-selling product in each category
+with selling_product as
+(
+select category,o.product_id,sum(sales) as total_sales
+from fact_orders o
+join dim_products p
+on o.product_id=p.product_id
+group by category, o.product_id
+), 
+ranking as
+(
+select *,rank() over(partition by category order by total_sales desc) as rnk
+from selling_product
+
+)
+select * from ranking
+where rnk=1;
+
+-- 15. Recursive CTE (Generate Calendar Dates)
+
+WITH RECURSIVE calendar AS (
+    SELECT DATE('2025-01-01') AS dt
+    UNION ALL
+    SELECT DATE_ADD(dt, INTERVAL 1 DAY)
+    FROM calendar
+    WHERE dt < '2025-01-31'
+)
+SELECT *
+FROM calendar;
